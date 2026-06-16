@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midnight Anime Admin Panel</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #0b0b0d; color: #e3e3e6; padding: 30px; margin: 0; }
+        .wrapper { max-width: 600px; margin: 0 auto; }
+        .card { background: #16161a; border: 1px solid #24242b; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
+        h2 { margin-top: 0; color: #9873ff; }
+        .block { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: #a1a1aa; }
+        input { width: 100%; padding: 12px; border: 1px solid #2e2e38; border-radius: 6px; background: #0b0b0d; color: #fff; box-sizing: border-box; }
+        input:focus { border-color: #9873ff; outline: none; }
+        button { background: #9873ff; color: #fff; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        button:hover { background: #ab8aff; }
+        .status { margin-top: 15px; font-size: 0.9rem; text-align: center; font-weight: 500; }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+    <div class="card">
+        <h2>Midnight Admin Manager (Vercel Edition)</h2>
+        <div class="block">
+            <label>AniList Anime ID</label>
+            <input type="text" id="aniId" placeholder="e.g., 21511">
+        </div>
+        <div class="block">
+            <label>Google Drive Share Link</label>
+            <input type="text" id="driveLink" placeholder="https://drive.google.com/file/d/.../view">
+        </div>
+        <button id="saveBtn">Convert & Save to DB</button>
+        <div id="log" class="status"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyB5ZX7wNokKlBYloBCT8rrTIOVc3hf_A6U",
+        authDomain: "midnight-anime-api.firebaseapp.com",
+        databaseURL: "https://midnight-anime-api-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "midnight-anime-api",
+        storageBucket: "midnight-anime-api.firebasestorage.app",
+        messagingSenderId: "379722770289",
+        appId: "1:379722770289:web:6e50264dd59cf808fab8d0"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    function convertDriveLink(url) {
+        const regExp = /d\/([a-zA-Z0-9-_]+)|id=([a-zA-Z0-9-_]+)/;
+        const match = url.match(regExp);
+        return match ? `https://drive.google.com/file/d/${match[1] || match[2]}/preview` : null;
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+        const id = document.getElementById('aniId').value.trim();
+        const link = document.getElementById('driveLink').value.trim();
+        const log = document.getElementById('log');
+
+        if (!id || !link) { log.innerHTML = "<span style='color:#ef4444;'>Fill all fields</span>"; return; }
+        const streamUrl = convertDriveLink(link);
+        if (!streamUrl) { log.innerHTML = "<span style='color:#ef4444;'>Invalid Drive Link</span>"; return; }
+
+        log.style.color = "#a1a1aa"; log.innerText = "Saving to database...";
+        try {
+            await set(ref(db, 'animes/' + id), { anilistId: String(id), originalLink: link, streamUrl, updatedAt: Date.now() });
+            log.innerHTML = "<span style='color:#10b981;'>Successfully saved!</span>";
+        } catch (err) {
+            log.innerHTML = `<span style='color:#ef4444;'>Error: ${err.message}</span>`;
+        }
+    });
+</script>
+</body>
+</html>
