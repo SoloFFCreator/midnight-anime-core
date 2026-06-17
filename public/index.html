@@ -10,10 +10,12 @@
         .card { background: #16161a; border: 1px solid #24242b; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
         h2 { margin-top: 0; color: #9873ff; }
         .block { margin-bottom: 18px; }
+        .row-grid { display: flex; gap: 15px; }
+        .row-grid .block { flex: 1; }
         label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: #a1a1aa; }
         input { width: 100%; padding: 12px; border: 1px solid #2e2e38; border-radius: 6px; background: #0b0b0d; color: #fff; box-sizing: border-box; }
         input:focus { border-color: #9873ff; outline: none; }
-        button { background: #9873ff; color: #fff; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        button { background: #9873ff; color: #fff; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         button:hover { background: #ab8aff; }
         .status { margin-top: 15px; font-size: 0.9rem; text-align: center; font-weight: 500; }
     </style>
@@ -21,16 +23,25 @@
 <body>
 <div class="wrapper">
     <div class="card">
-        <h2>Midnight Admin Manager (Vercel Edition)</h2>
-        <div class="block">
-            <label>AniList Anime ID</label>
-            <input type="text" id="aniId" placeholder="e.g., 21511">
+        <h2>Midnight Episode Manager</h2>
+        
+        <div class="row-grid">
+            <div class="block">
+                <label>AniList Anime ID</label>
+                <input type="text" id="aniId" placeholder="e.g., 21511">
+            </div>
+            <div class="block">
+                <label>Episode Number</label>
+                <input type="text" id="epNum" placeholder="e.g., 1">
+            </div>
         </div>
+
         <div class="block">
-            <label>Google Drive Share Link</label>
-            <input type="text" id="driveLink" placeholder="https://drive.google.com/file/d/.../view">
+            <label>Streaming Video Link (Abyss.to or Google Drive)</label>
+            <input type="text" id="videoLink" placeholder="Paste abyss embed link or drive share link...">
         </div>
-        <button id="saveBtn">Convert & Save to DB</button>
+        
+        <button id="saveBtn">Save Episode Entry</button>
         <div id="log" class="status"></div>
     </div>
 </div>
@@ -52,27 +63,46 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    function convertDriveLink(url) {
-        const regExp = /d\/([a-zA-Z0-9-_]+)|id=([a-zA-Z0-9-_]+)/;
-        const match = url.match(regExp);
-        return match ? `https://drive.google.com/file/d/${match[1] || match[2]}/preview` : null;
+    // Smart link converter
+    function parseStreamingLink(url) {
+        if (url.includes("drive.google.com")) {
+            const regExp = /d\/([a-zA-Z0-9-_]+)|id=([a-zA-Z0-9-_]+)/;
+            const match = url.match(regExp);
+            return match ? `https://drive.google.com/file/d/${match[1] || match[2]}/preview` : url;
+        }
+        // If it's abyss.to or anything else, pass it through directly!
+        return url;
     }
 
     document.getElementById('saveBtn').addEventListener('click', async () => {
         const id = document.getElementById('aniId').value.trim();
-        const link = document.getElementById('driveLink').value.trim();
+        const ep = document.getElementById('epNum').value.trim();
+        const rawLink = document.getElementById('videoLink').value.trim();
         const log = document.getElementById('log');
 
-        if (!id || !link) { log.innerHTML = "<span style='color:#ef4444;'>Fill all fields</span>"; return; }
-        const streamUrl = convertDriveLink(link);
-        if (!streamUrl) { log.innerHTML = "<span style='color:#ef4444;'>Invalid Drive Link</span>"; return; }
+        if (!id || !ep || !rawLink) { 
+            log.innerHTML = "<span style='color:#ef4444;'>Please populate all configuration boxes.</span>"; 
+            return; 
+        }
+        
+        const finalizedStreamUrl = parseStreamingLink(rawLink);
 
-        log.style.color = "#a1a1aa"; log.innerText = "Saving to database...";
+        log.style.color = "#a1a1aa"; 
+        log.innerText = `Saving Episode ${ep} to cluster...`;
+        
         try {
-            await set(ref(db, 'animes/' + id), { anilistId: String(id), originalLink: link, streamUrl, updatedAt: Date.now() });
-            log.innerHTML = "<span style='color:#10b981;'>Successfully saved!</span>";
+            // Write to the specific episode index so we never erase previous episodes!
+            await set(ref(db, `animes/${id}/episodes/${ep}`), finalizedStreamUrl);
+            
+            // Sync overall structural tracking values
+            await set(ref(db, `animes/${id}/anilistId`), String(id));
+            await set(ref(db, `animes/${id}/updatedAt`), Date.now());
+
+            log.innerHTML = `<span style='color:#10b981;'>Success: Episode ${ep} is live!</span>`;
+            document.getElementById('epNum').value = ""; // Clear ep box for rapid additions
+            document.getElementById('videoLink').value = "";
         } catch (err) {
-            log.innerHTML = `<span style='color:#ef4444;'>Error: ${err.message}</span>`;
+            log.innerHTML = `<span style='color:#ef4444;'>Write Error: ${err.message}</span>`;
         }
     });
 </script>
